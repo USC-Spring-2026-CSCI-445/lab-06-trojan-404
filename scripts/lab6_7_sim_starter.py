@@ -114,7 +114,7 @@ class PDController:
         ######### Your code ends here #########
 
     def control(self, err, t):
-        dt = t - self.t_prev
+        #dt = t - self.t_prev
         # Compute PD control action here
         ######### Your code starts here #########
         if self.t_prev is None:
@@ -122,6 +122,7 @@ class PDController:
             self.err_prev = err
             return 0.0
 
+        dt = t - self.t_prev
         if dt <= 1e-6:
             return 0.0
 
