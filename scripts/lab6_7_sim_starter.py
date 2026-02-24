@@ -173,27 +173,17 @@ class ObstacleFreeWaypointController:
 
         # define linear and angular PID controllers here
         ######### Your code starts here #########
-        self.wp_linear_pid = PIDController(
+        self.linear_pid = PIDController(
             kP=0.8, kI=0.0, kD=0.1, kS=0.0,
             u_min=0.0, u_max=0.22
         )
-        self.wp_angular_pid = PIDController(
+        self.angular_pid = PIDController(
             kP=2.5, kI=0.0, kD=0.2, kS=0.0,
             u_min=-2.84, u_max=2.84
         )
 
-        self.wall_pd = PDController(
-            kP=2.0, kD=0.2, kS=0.0,
-            u_min=-2.84, u_max=2.84
-        )
-
-        self.wp_distance_thresh = 0.10
-        self.wp_angle_gate = radians(20)
-
-        self._avoiding = False
-        self._avoid_exit_margin = 0.25
-        self._cone_override = radians(40)
-        self._stop_dist = 0.35
+        self.distance_thresh = 0.10
+        self.angle_gate = radians(20)
         ######### Your code ends here #########
 
     def odom_callback(self, msg):
@@ -388,18 +378,31 @@ class ObstacleAvoidingWaypointController:
         ctrl_msg = Twist()
 
         ######### Your code starts here #########
-        if self.ir_distance is None:
+        if self.laserscan is None or self.current_position is None:
             ctrl_msg.linear.x = 0.0
             ctrl_msg.angular.z = 0.0
             self.robot_ctrl_pub.publish(ctrl_msg)
             return
 
-        err = self.wall_following_desired_distance - self.ir_distance
-        t = time()
-        u = self.wall_pd.control(err, t)
+        ranges = list(self.laserscan.ranges)
+        front_raw = ranges[0:25] + ranges[-25:]
+        front = [r for r in front_raw if (r > self.laserscan.range_min and r < self.laserscan.range_max)]
+        front_min = min(front) if len(front) > 0 else inf
 
-        v = 0.10
-        if self.ir_distance < self._stop_dist:
+        if self.ir_distance is None:
+            base_u = 0.0
+        else:
+            err = self.wall_following_desired_distance - self.ir_distance
+            t = time()
+            base_u = self.wall_pd.control(err, t)
+
+        u = base_u
+
+        if front_min < 0.55:
+            u = 2.0
+
+        v = 0.08
+        if front_min < 0.65:
             v = 0.0
 
         ctrl_msg.linear.x = v
