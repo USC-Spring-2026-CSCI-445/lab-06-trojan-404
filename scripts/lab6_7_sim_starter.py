@@ -275,7 +275,7 @@ class ObstacleAvoidingWaypointController:
         self.laserscan: Optional[LaserScan] = None
         self.laserscan_angles: Optional[List[float]] = None
         self.ir_distance = None
-        self.wall_following_desired_distance = 0.5  # set this to whatever you want
+        self.wall_following_desired_distance = 0.75  # set this to whatever you want
 
         # Subscriber to the robot's current position (assuming you have Odometry data)
         self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
@@ -309,8 +309,7 @@ class ObstacleAvoidingWaypointController:
 
         self._avoiding = False
         self._avoid_exit_margin = 0.25
-        self._cone_override = radians(40)
-        self._stop_dist = 0.35
+        self._stop_dist = 0.85
         ######### Your code ends here #########
 
     def robot_laserscan_callback(self, msg: LaserScan):
@@ -398,11 +397,11 @@ class ObstacleAvoidingWaypointController:
 
         u = base_u
 
-        if front_min < 0.55:
+        if front_min < 0.85:
             u = 2.0
 
         v = 0.08
-        if front_min < 0.65:
+        if front_min < 0.95:
             v = 0.0
 
         ctrl_msg.linear.x = v
@@ -495,7 +494,7 @@ class ObstacleAvoidingWaypointController:
         rate = rospy.Rate(10)  # 20 Hz
 
         current_waypoint_idx = 0
-        distance_from_wall_safety = 1.0
+        distance_from_wall_safety = 1.5
         cone_angle = radians(5)
 
         while not rospy.is_shutdown():
@@ -527,7 +526,7 @@ class ObstacleAvoidingWaypointController:
                 sleep(0.05)
                 continue
 
-            cone = self._cone_override
+            cone = cone_angle
             distances_in_cone = self.laserscan_distances_to_point(goal, cone_angle=cone, visualize=True)
             distances_in_cone = [d for d in distances_in_cone if (not isinf(d)) and d > 0.0]
             min_dist = min(distances_in_cone) if len(distances_in_cone) > 0 else inf
