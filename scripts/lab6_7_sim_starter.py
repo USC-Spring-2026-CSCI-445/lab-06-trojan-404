@@ -173,18 +173,27 @@ class ObstacleFreeWaypointController:
 
         # define linear and angular PID controllers here
         ######### Your code starts here #########
-        self.linear_pid = PIDController(
+        self.wp_linear_pid = PIDController(
             kP=0.8, kI=0.0, kD=0.1, kS=0.0,
             u_min=0.0, u_max=0.22
         )
-
-        self.angular_pid = PIDController(
+        self.wp_angular_pid = PIDController(
             kP=2.5, kI=0.0, kD=0.2, kS=0.0,
             u_min=-2.84, u_max=2.84
         )
 
-        self.distance_thresh = 0.10
-        self.angle_gate = radians(20)  
+        self.wall_pd = PDController(
+            kP=2.0, kD=0.2, kS=0.0,
+            u_min=-2.84, u_max=2.84
+        )
+
+        self.wp_distance_thresh = 0.10
+        self.wp_angle_gate = radians(20)
+
+        self._avoiding = False
+        self._avoid_exit_margin = 0.25
+        self._cone_override = radians(40)
+        self._stop_dist = 0.35
         ######### Your code ends here #########
 
     def odom_callback(self, msg):
@@ -307,6 +316,11 @@ class ObstacleAvoidingWaypointController:
 
         self.wp_distance_thresh = 0.10
         self.wp_angle_gate = radians(20)
+
+        self._avoiding = False
+        self._avoid_exit_margin = 0.25
+        self._cone_override = radians(40)
+        self._stop_dist = 0.35
         ######### Your code ends here #########
 
     def robot_laserscan_callback(self, msg: LaserScan):
@@ -384,7 +398,11 @@ class ObstacleAvoidingWaypointController:
         t = time()
         u = self.wall_pd.control(err, t)
 
-        ctrl_msg.linear.x = 0.10
+        v = 0.10
+        if self.ir_distance < self._stop_dist:
+            v = 0.0
+
+        ctrl_msg.linear.x = v
         ctrl_msg.angular.z = u
         ######### Your code ends here #########
 
@@ -506,10 +524,22 @@ class ObstacleAvoidingWaypointController:
                 sleep(0.05)
                 continue
 
-            distances_in_cone = self.laserscan_distances_to_point(goal, cone_angle=cone_angle, visualize=True)
+            cone = self._cone_override
+            distances_in_cone = self.laserscan_distances_to_point(goal, cone_angle=cone, visualize=True)
+            distances_in_cone = [d for d in distances_in_cone if (not isinf(d)) and d > 0.0]
             min_dist = min(distances_in_cone) if len(distances_in_cone) > 0 else inf
 
-            if min_dist < distance_from_wall_safety:
+            enter_thresh = distance_from_wall_safety
+            exit_thresh = distance_from_wall_safety + self._avoid_exit_margin
+
+            if self._avoiding:
+                if min_dist > exit_thresh:
+                    self._avoiding = False
+            else:
+                if min_dist < enter_thresh:
+                    self._avoiding = True
+
+            if self._avoiding:
                 self.obstacle_avoiding_control(visualize=True)
             else:
                 self.waypoint_tracking_control(goal)
