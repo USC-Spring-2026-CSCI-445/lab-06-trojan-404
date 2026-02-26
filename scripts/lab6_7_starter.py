@@ -175,7 +175,18 @@ class ObstacleFreeWaypointController:
 
         # define linear and angular PID controllers here
         ######### Your code starts here #########
+        self.linear_pid = PIDController(
+            kP=0.8, kI=0.0, kD=0.1, kS=0.0,
+            u_min=0.0, u_max=0.22
+        )
 
+        self.angular_pid = PIDController(
+            kP=2.5, kI=0.0, kD=0.2, kS=0.0,
+            u_min=-2.84, u_max=2.84
+        )
+
+        self.distance_thresh = 0.10
+        self.angle_gate = radians(20)
         ######### Your code ends here #########
 
     def odom_callback(self, msg):
@@ -194,7 +205,18 @@ class ObstacleFreeWaypointController:
 
         # Calculate error in position and orientation
         ######### Your code starts here #########
+        dx = goal_position["x"] - self.current_position["x"]
+        dy = goal_position["y"] - self.current_position["y"]
 
+        distance_error = sqrt(dx * dx + dy * dy)
+
+        desired_theta = atan2(dy, dx)
+        angle_error = desired_theta - self.current_position["theta"]
+
+        while angle_error > pi:
+            angle_error -= 2 * pi
+        while angle_error < -pi:
+            angle_error += 2 * pi
         ######### Your code ends here #########
 
         return distance_error, angle_error
@@ -209,7 +231,39 @@ class ObstacleFreeWaypointController:
 
             # Travel through waypoints one at a time, checking if robot is close enough
             ######### Your code starts here #########
+            if current_waypoint_idx >= len(self.waypoints):
+                ctrl_msg.linear.x = 0.0
+                ctrl_msg.angular.z = 0.0
+                self.robot_ctrl_pub.publish(ctrl_msg)
+                break
 
+            goal = self.waypoints[current_waypoint_idx]
+            err = self.calculate_error(goal)
+            if err is None:
+                rate.sleep()
+                continue
+
+            distance_error, angle_error = err
+
+            if distance_error < self.distance_thresh:
+                current_waypoint_idx += 1
+                ctrl_msg.linear.x = 0.0
+                ctrl_msg.angular.z = 0.0
+                self.robot_ctrl_pub.publish(ctrl_msg)
+                rate.sleep()
+                continue
+
+            t = time()
+
+            cmd_angular = self.angular_pid.control(angle_error, t)
+            cmd_linear = self.linear_pid.control(distance_error, t)
+
+            if abs(angle_error) > self.angle_gate:
+                cmd_linear = 0.0
+
+            ctrl_msg.linear.x = cmd_linear
+            ctrl_msg.angular.z = cmd_angular
+            self.robot_ctrl_pub.publish(ctrl_msg)
             ######### Your code ends here #########
             rate.sleep()
 
