@@ -52,13 +52,45 @@ class PIDController:
         assert u_min < u_max, "u_min should be less than u_max"
         # Initializa PID variables here
         ######### Your code starts here #########
+        self.kP = kP
+        self.kI = kI
+        self.kD = kD
+        self.kS = kS
+        self.u_min = u_min
+        self.u_max = u_max
 
+        self.err_prev = 0.0
+        self.err_int = 0.0
+        self.t_prev = None
         ######### Your code ends here #########
 
     def control(self, err, t):
         # compute PID control action here
         ######### Your code starts here #########
+        if self.t_prev is None:
+            self.t_prev = t
+            self.err_prev = err
+            return 0.0
 
+        dt = t - self.t_prev
+        if dt <= 1e-6:
+            return 0.0
+
+        self.err_int += err * dt
+        derr = (err - self.err_prev) / dt
+
+        u = self.kP * err + self.kI * self.err_int + self.kD * derr
+
+        if abs(u) > 1e-9:
+            u += self.kS * (1.0 if u > 0 else -1.0)
+
+        u_sat = max(self.u_min, min(self.u_max, u))
+        if u_sat != u:
+            self.err_int -= err * dt 
+
+        self.err_prev = err
+        self.t_prev = t
+        return u_sat
         ######### Your code ends here #########
 
 
@@ -72,14 +104,40 @@ class PDController:
         assert u_min < u_max, "u_min should be less than u_max"
         # Initialize PD variables here
         ######### Your code starts here #########
+        self.kP = kP
+        self.kD = kD
+        self.kS = kS
+        self.u_min = u_min
+        self.u_max = u_max
 
+        self.err_prev = 0.0
+        self.t_prev = None
         ######### Your code ends here #########
 
     def control(self, err, t):
         dt = t - self.t_prev
         # Compute PD control action here
         ######### Your code starts here #########
+        if self.t_prev is None:
+            self.t_prev = t
+            self.err_prev = err
+            return 0.0
 
+        dt = t - self.t_prev
+        if dt <= 1e-6:
+            return 0.0
+
+        derr = (err - self.err_prev) / dt
+        u = self.kP * err + self.kD * derr
+
+        if abs(u) > 1e-9:
+            u += self.kS * (1.0 if u > 0 else -1.0)
+
+        u = max(self.u_min, min(self.u_max, u))
+
+        self.err_prev = err
+        self.t_prev = t
+        return u
         ######### Your code ends here #########
 
 
